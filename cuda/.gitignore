@@ -3,5 +3,5 @@ XSBench
 XSBench.hpcstruct
 XS_data.dat
 gvprof-database/
-gvprof-measurements/
+gvprof-measurements*
 gvprof.log
