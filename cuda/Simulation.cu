@@ -63,20 +63,20 @@ __global__ void xs_lookup_kernel_baseline(Inputs in, SimulationData GSD )
 		
 	// Perform macroscopic Cross Section Lookup
 	calculate_macro_xs(
-			p_energy,        // Sampled neutron energy (in lethargy)
-			mat,             // Sampled material type index neutron is in
-			in.n_isotopes,   // Total number of isotopes in simulation
-			in.n_gridpoints, // Number of gridpoints per isotope in simulation
-			GSD.num_nucs,     // 1-D array with number of nuclides per material
-			GSD.concs,        // Flattened 2-D array with concentration of each nuclide in each material
-			GSD.unionized_energy_array, // 1-D Unionized energy array
-			GSD.index_grid,   // Flattened 2-D grid holding indices into nuclide grid for each unionized energy level
-			GSD.nuclide_grid, // Flattened 2-D grid holding energy levels and XS_data for all nuclides in simulation
-			GSD.mats,         // Flattened 2-D array with nuclide indices defining composition of each type of material
-			macro_xs_vector, // 1-D array with result of the macroscopic cross section (5 different reaction channels)
-			in.grid_type,    // Lookup type (nuclide, hash, or unionized)
-			in.hash_bins,    // Number of hash bins used (if using hash lookup type)
-			GSD.max_num_nucs  // Maximum number of nuclides present in any material
+			p_energy,        // 			Sampled neutron energy (in lethargy)
+			mat,             // 			Sampled material type index neutron is in
+			in.n_isotopes,   // 			Total number of isotopes in simulation
+			in.n_gridpoints, //100 			Number of gridpoints per isotope in simulation
+			GSD.num_nucs,     //12 			1-D array with number of nuclides per material
+			GSD.concs,        //408 			Flattened 2-D array with concentration of each nuclide in each material
+			GSD.unionized_energy_array, //6800		 1-D Unionized energy array
+			GSD.index_grid,   //462400 					Flattened 2-D grid holding indices into nuclide grid for each unionized energy level
+			GSD.nuclide_grid, //6800				Flattened 2-D grid holding energy levels and XS_data for all nuclides in simulation
+			GSD.mats,         // 				Flattened 2-D array with nuclide indices defining composition of each type of material
+			macro_xs_vector, // 	  	 		1-D array with result of the macroscopic cross section (5 different reaction channels)
+			in.grid_type,    // 				Lookup type (nuclide, hash, or unionized)
+			in.hash_bins,    // 				Number of hash bins used (if using hash lookup type)
+			GSD.max_num_nucs  // 				Maximum number of nuclides present in any material
 			);
 
 	// For verification, and to prevent the compiler from optimizing
@@ -127,7 +127,7 @@ __device__ void calculate_micro_xs(   double p_energy, int nuc, long n_isotopes,
 		// pull ptr from energy grid and check to ensure that
 		// we're not reading off the end of the nuclide's grid
 		if( index_data[idx * n_isotopes + nuc] == n_gridpoints - 1 )
-			low = &nuclide_grids[nuc*n_gridpoints + index_data[idx * n_isotopes + nuc] - 1];
+			low = &nuclide_grids[nuc*n_gridpoints + index_data[idx * n_isotopes + nuc] - 1]; // nuc is read from mats
 		else
 			low = &nuclide_grids[nuc*n_gridpoints + index_data[idx * n_isotopes + nuc]];
 	}
@@ -185,7 +185,7 @@ __device__ void calculate_micro_xs(   double p_energy, int nuc, long n_isotopes,
 
 // Calculates macroscopic cross section based on a given material & energy 
 __device__ void calculate_macro_xs( double p_energy, int mat, long n_isotopes,
-                         long n_gridpoints, int * __restrict__ num_nucs,
+                         long n_gridpoints /* 100 */, int * __restrict__ num_nucs,
                          double * __restrict__ concs,
                          double * __restrict__ egrid, int * __restrict__ index_data,
                          NuclideGridPoint * __restrict__ nuclide_grids,
@@ -224,9 +224,15 @@ __device__ void calculate_macro_xs( double p_energy, int mat, long n_isotopes,
 	//  avoid simulataneous writing to the same data structure)
 	for( int j = 0; j < num_nucs[mat]; j++ )
 	{
+		// num_nucs[12] = [34, 5, 4, 4, 27, 21, 21, 21, 21, 21, 9, 9]
+		// mat >= 0 && mat <= 12 
+		// max_num_nucs = 34
+		// mats is a const array
 		double xs_vector[5];
 		p_nuc = mats[mat*max_num_nucs + j];
 		conc = concs[mat*max_num_nucs + j];
+		
+		// n_isotopes = 68		
 		calculate_micro_xs( p_energy, p_nuc, n_isotopes,
 		                    n_gridpoints, egrid, index_data,
 		                    nuclide_grids, idx, xs_vector, grid_type, hash_bins );

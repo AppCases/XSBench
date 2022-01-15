@@ -124,6 +124,8 @@ SimulationData grid_init_do_not_profile( Inputs in, int mype )
 	SD.nuclide_grid     = (NuclideGridPoint *) malloc( SD.length_nuclide_grid * sizeof(NuclideGridPoint));
 	assert(SD.nuclide_grid != NULL);
 	nbytes += SD.length_nuclide_grid * sizeof(NuclideGridPoint);
+
+	// nuclide_grid initialization
 	for( int i = 0; i < SD.length_nuclide_grid; i++ )
 	{
 		SD.nuclide_grid[i].energy        = LCG_random_double(&seed);
@@ -252,6 +254,12 @@ SimulationData grid_init_do_not_profile( Inputs in, int mype )
 	// materials have the same number of nuclides.
 	SD.mats = load_mats(SD.num_nucs, in.n_isotopes, &SD.max_num_nucs);
 	SD.length_mats = SD.length_num_nucs * SD.max_num_nucs;
+	for (int i = 0; i < 408; i++) {
+		printf("%d ", SD.mats[i]);
+		if (i % 11 == 0) printf("\n");
+	}
+
+
 
 	// Intialize the flattened 2D grid of nuclide concentration data. The grid holds
 	// a list of nuclide concentrations for each of the 12 material types. The
