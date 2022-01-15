@@ -1,4 +1,5 @@
 #include "XSbench_header.cuh"
+#include <bits/stdc++.h>
 
 ////////////////////////////////////////////////////////////////////////////////////
 // BASELINE FUNCTIONS
@@ -12,7 +13,7 @@
 // line argument.
 ////////////////////////////////////////////////////////////////////////////////////
 
-unsigned long long run_event_based_simulation_baseline(Inputs in, SimulationData GSD, int mype)
+unsigned long long run_event_based_simulation_baseline(Inputs in, SimulationData GSD, int mype, int* index_grid)
 {
 	////////////////////////////////////////////////////////////////////////////////
 	// Configure & Launch Simulation Kernel
@@ -21,6 +22,48 @@ unsigned long long run_event_based_simulation_baseline(Inputs in, SimulationData
 
 	int nthreads = 256;
 	int nblocks = ceil( (double) in.lookups / (double) nthreads);
+
+	
+
+	long* idx_list;
+	int* mat_list;
+	double* energy_list;
+
+	cudaMalloc((void **) &idx_list, nblocks * nthreads * sizeof(long));
+	cudaMalloc((void **) &mat_list, nblocks * nthreads * sizeof(int));
+	cudaMalloc((void **) &energy_list, nblocks * nthreads * sizeof(double)); 
+	
+
+	generate_random_index<<<nblocks, nthreads>>>(idx_list, energy_list, mat_list, in.n_isotopes, in.n_gridpoints, GSD.unionized_energy_array);
+
+	cudaDeviceSynchronize();
+
+	long* idx_list_host = (long*) malloc(nblocks * nthreads * sizeof(long));
+	cudaMemcpy(idx_list_host, idx_list, nblocks * nthreads * sizeof(long), cudaMemcpyDeviceToHost);
+
+	// printf("================================================================\n");
+	// for (int i = 0; i < nblocks * nthreads; i++) {
+	// 	printf("%lld ", idx_list_host[i]);
+	// 	if (i % 30 == 29) printf("\n");
+ 	// }
+	// printf("================================================================\n");
+
+	std::sort(idx_list_host, idx_list_host+(nblocks * nthreads));
+
+	int index = 0; // slow index
+	for (int k = 1; k < nblocks * nthreads; k++) {
+		if (idx_list_host[k] != idx_list_host[index]) {
+			index++;
+			idx_list_host[index] = idx_list_host[k];
+		}
+	}
+
+	printf("================================================================\n");
+	for (int i = 0; i < nblocks * nthreads; i++) {
+		printf("%lld ", idx_list_host[i]);
+		if (i % 30 == 29) printf("\n");
+ 	}
+	printf("================================================================\n");
 
 	xs_lookup_kernel_baseline<<<nblocks, nthreads>>>( in, GSD );
 	gpuErrchk( cudaPeekAtLastError() );
@@ -36,6 +79,29 @@ unsigned long long run_event_based_simulation_baseline(Inputs in, SimulationData
 	gpuErrchk( cudaDeviceSynchronize() );
 
 	return verification_scalar;
+}
+
+__global__ void generate_random_index(long* idx_list, double* energy_list, int* mat_list, long n_isotopes, 
+long n_gridpoints, double* egrid) {
+	int i = blockDim.x * blockIdx.x + threadIdx.x;
+
+	// Set the initial seed value
+	uint64_t seed = STARTING_SEED;	
+
+	// Forward seed to lookup index (we need 2 samples per lookup)
+	seed = fast_forward_LCG(seed, 2*i);
+
+	energy_list[i] = LCG_random_double(&seed);
+
+
+
+	mat_list[i] = pick_mat(&seed);
+	
+	idx_list[i] = grid_search( n_isotopes * n_gridpoints, energy_list[i], egrid);	
+
+	// printf("idx=%lld,, i=%d %lld, %lld, %f\n", idx_list[i], i, n_isotopes, n_gridpoints, energy_list[i]);
+
+
 }
 
 // In this kernel, we perform a single lookup with each thread. Threads within a warp
@@ -204,14 +270,18 @@ __device__ void calculate_macro_xs( double p_energy, int mat, long n_isotopes,
 	// If we are using the nuclide grid search, it will have to be
 	// done inside of the "calculate_micro_xs" function for each different
 	// nuclide in the material.
-	if( grid_type == UNIONIZED )
+	if( grid_type == UNIONIZED ) {
+		// printf("hhh n_isotopes:%lld, n_gridpoints:%lld, p_energy:%f hhhhhhaaaaaa\n", n_isotopes, n_gridpoints, p_energy);
 		idx = grid_search( n_isotopes * n_gridpoints, p_energy, egrid);	
+	}
+		
 	else if( grid_type == HASH )
 	{
 		double du = 1.0 / hash_bins;
 		idx = p_energy / du;
 	}
 	
+
 	// Once we find the pointer array on the UEG, we can pull the data
 	// from the respective nuclide grids, as well as the nuclide
 	// concentration data for the material

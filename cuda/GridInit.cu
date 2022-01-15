@@ -59,6 +59,7 @@ SimulationData move_simulation_data_to_device( Inputs in, int mype, SimulationDa
 
 	sz = GSD.length_index_grid * sizeof(int);
 	printf("GSD.length_index_grid=%d, sz=%d\n", GSD.length_index_grid, sz);
+	// initialized later
 	gpuErrchk( cudaMalloc((void **) &GSD.index_grid, sz) );
 	gpuErrchk( cudaMemcpy(GSD.index_grid, SD.index_grid, sz, cudaMemcpyHostToDevice) );
 	total_sz += sz;
