@@ -58,12 +58,40 @@ unsigned long long run_event_based_simulation_baseline(Inputs in, SimulationData
 		}
 	}
 
-	printf("================================================================\n");
-	for (int i = 0; i < nblocks * nthreads; i++) {
-		printf("%lld ", idx_list_host[i]);
-		if (i % 30 == 29) printf("\n");
- 	}
-	printf("================================================================\n");
+
+	int count = index + 1;
+	size_t size = count * 69 * sizeof(int);
+	// gpuErrchk( cudaMalloc((void **) &GSD.index_grid, size));
+
+	// initialization
+	int * host_index_grid = (int*) malloc(size);
+	for (int i = 0; i < count; i++) {
+		host_index_grid[i * 69] = idx_list_host[i];
+		memcpy(host_index_grid+(i*69)+1, index_grid+(idx_list_host[i]*68), 68 * sizeof(int));
+	}
+
+
+	// verify initialization correctness
+	for (int i = 0; i < count * 69; i++) {
+		printf("%d ", host_index_grid[i]);
+		if(i % 69 == 68) printf("\n");
+	}
+	printf("=======================================================\n");
+	printf("=======================================================\n");
+	for (int i = 0; i < count; i++) {
+		int k = idx_list_host[i] * 68;
+		for (int j = k; j < (k + 68); j++)
+			printf("%d ", index_grid[j]);
+		printf("\n");
+	}
+	
+
+
+
+
+
+
+
 
 	xs_lookup_kernel_baseline<<<nblocks, nthreads>>>( in, GSD );
 	gpuErrchk( cudaPeekAtLastError() );
