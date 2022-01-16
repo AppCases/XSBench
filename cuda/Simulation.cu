@@ -61,7 +61,7 @@ unsigned long long run_event_based_simulation_baseline(Inputs in, SimulationData
 
 	int count = index + 1;
 	size_t size = count * 69 * sizeof(int);
-	// gpuErrchk( cudaMalloc((void **) &GSD.index_grid, size));
+	gpuErrchk( cudaMalloc((void **) &GSD.index_grid, size));
 
 	// initialization
 	int * host_index_grid = (int*) malloc(size);
@@ -70,30 +70,26 @@ unsigned long long run_event_based_simulation_baseline(Inputs in, SimulationData
 		memcpy(host_index_grid+(i*69)+1, index_grid+(idx_list_host[i]*68), 68 * sizeof(int));
 	}
 
+	gpuErrchk( cudaMemcpy(GSD.index_grid, host_index_grid, size, cudaMemcpyHostToDevice) );
 
 	// verify initialization correctness
-	for (int i = 0; i < count * 69; i++) {
-		printf("%d ", host_index_grid[i]);
-		if(i % 69 == 68) printf("\n");
-	}
-	printf("=======================================================\n");
-	printf("=======================================================\n");
-	for (int i = 0; i < count; i++) {
-		int k = idx_list_host[i] * 68;
-		for (int j = k; j < (k + 68); j++)
-			printf("%d ", index_grid[j]);
-		printf("\n");
-	}
+	// for (int i = 0; i < count * 69; i++) {
+	// 	printf("%d ", host_index_grid[i]);
+	// 	if(i % 69 == 68) printf("\n");
+	// }
+	// printf("=======================================================\n");
+	// printf("=======================================================\n");
+	// for (int i = 0; i < count; i++) {
+	// 	int k = idx_list_host[i] * 68;
+	// 	for (int j = k; j < (k + 68); j++)
+	// 		printf("%d ", index_grid[j]);
+	// 	printf("\n");
+	// }
 	
 
 
 
-
-
-
-
-
-	xs_lookup_kernel_baseline<<<nblocks, nthreads>>>( in, GSD );
+	xs_lookup_kernel_baseline<<<nblocks, nthreads>>>( in, GSD, idx_list, mat_list, energy_list, count);
 	gpuErrchk( cudaPeekAtLastError() );
 	gpuErrchk( cudaDeviceSynchronize() );
 	
@@ -135,7 +131,7 @@ long n_gridpoints, double* egrid) {
 // In this kernel, we perform a single lookup with each thread. Threads within a warp
 // do not really have any relation to each other, and divergence due to high nuclide count fuel
 // material lookups are costly. This kernel constitutes baseline performance.
-__global__ void xs_lookup_kernel_baseline(Inputs in, SimulationData GSD )
+__global__ void xs_lookup_kernel_baseline(Inputs in, SimulationData GSD, long* idx_list, int* mat_list, double* energy_list, int count)
 {
 	// The lookup ID. Used to set the seed, and to store the verification value
 	const int i = blockIdx.x *blockDim.x + threadIdx.x;
@@ -144,14 +140,17 @@ __global__ void xs_lookup_kernel_baseline(Inputs in, SimulationData GSD )
 		return;
 
 	// Set the initial seed value
-	uint64_t seed = STARTING_SEED;	
+	// uint64_t seed = STARTING_SEED;	
 
 	// Forward seed to lookup index (we need 2 samples per lookup)
-	seed = fast_forward_LCG(seed, 2*i);
+	// seed = fast_forward_LCG(seed, 2*i);
 
 	// Randomly pick an energy and material for the particle
-	double p_energy = LCG_random_double(&seed);
-	int mat         = pick_mat(&seed); 
+	// double p_energy = LCG_random_double(&seed);
+	// int mat         = pick_mat(&seed); 
+
+	double p_energy = energy_list[i];
+	int mat = mat_list[i];
 		
 	double macro_xs_vector[5] = {0};
 		
@@ -170,7 +169,9 @@ __global__ void xs_lookup_kernel_baseline(Inputs in, SimulationData GSD )
 			macro_xs_vector, // 	  	 		1-D array with result of the macroscopic cross section (5 different reaction channels)
 			in.grid_type,    // 				Lookup type (nuclide, hash, or unionized)
 			in.hash_bins,    // 				Number of hash bins used (if using hash lookup type)
-			GSD.max_num_nucs  // 				Maximum number of nuclides present in any material
+			GSD.max_num_nucs,  // 				Maximum number of nuclides present in any material
+			idx_list,		// pass idx
+			count			// pass count
 			);
 
 	// For verification, and to prevent the compiler from optimizing
@@ -197,7 +198,8 @@ __device__ void calculate_micro_xs(   double p_energy, int nuc, long n_isotopes,
                            long n_gridpoints,
                            double * __restrict__ egrid, int * __restrict__ index_data,
                            NuclideGridPoint * __restrict__ nuclide_grids,
-                           long idx, double * __restrict__ xs_vector, int grid_type, int hash_bins ){
+                           long idx, double * __restrict__ xs_vector, int grid_type, int hash_bins,
+						   int count ){
 	// Variables
 	double f;
 	NuclideGridPoint * low, * high;
@@ -220,10 +222,33 @@ __device__ void calculate_micro_xs(   double p_energy, int nuc, long n_isotopes,
 	{
 		// pull ptr from energy grid and check to ensure that
 		// we're not reading off the end of the nuclide's grid
-		if( index_data[idx * n_isotopes + nuc] == n_gridpoints - 1 )
-			low = &nuclide_grids[nuc*n_gridpoints + index_data[idx * n_isotopes + nuc] - 1]; // nuc is read from mats
+		int begin = 0, end = count, mid;
+		bool flag = true;
+		while (begin <= end && flag) {
+			mid = (end - begin) / 2 + begin;
+			int mid_num = index_data[mid * 69];
+			if (mid_num == idx) {
+				flag = false;
+			} else if (mid_num > idx) {
+				end = mid - 1;
+			} else {
+				begin = mid + 1;
+			}
+		}
+
+		int index = mid + nuc + 1;
+
+		if( index_data[index] == n_gridpoints - 1 )
+			low = &nuclide_grids[nuc*n_gridpoints + index_data[index] - 1]; // nuc is read from mats
 		else
-			low = &nuclide_grids[nuc*n_gridpoints + index_data[idx * n_isotopes + nuc]];
+			low = &nuclide_grids[nuc*n_gridpoints + index_data[index]];
+
+
+		// if( index_data[idx * n_isotopes + nuc] == n_gridpoints - 1 )
+		// 	low = &nuclide_grids[nuc*n_gridpoints + index_data[idx * n_isotopes + nuc] - 1]; // nuc is read from mats
+		// else
+		// 	low = &nuclide_grids[nuc*n_gridpoints + index_data[idx * n_isotopes + nuc]];
+		
 	}
 	else // Hash grid
 	{
@@ -284,10 +309,13 @@ __device__ void calculate_macro_xs( double p_energy, int mat, long n_isotopes,
                          double * __restrict__ egrid, int * __restrict__ index_data,
                          NuclideGridPoint * __restrict__ nuclide_grids,
                          int * __restrict__ mats,
-                         double * __restrict__ macro_xs_vector, int grid_type, int hash_bins, int max_num_nucs ){
+                         double * __restrict__ macro_xs_vector, int grid_type, int hash_bins, int max_num_nucs, 
+						 long* idx_list, int count){
 	int p_nuc; // the nuclide we are looking up
 	long idx = -1;	
 	double conc; // the concentration of the nuclide in the material
+
+	const int i = blockIdx.x *blockDim.x + threadIdx.x;
 
 	// cleans out macro_xs_vector
 	for( int k = 0; k < 5; k++ )
@@ -300,7 +328,7 @@ __device__ void calculate_macro_xs( double p_energy, int mat, long n_isotopes,
 	// nuclide in the material.
 	if( grid_type == UNIONIZED ) {
 		// printf("hhh n_isotopes:%lld, n_gridpoints:%lld, p_energy:%f hhhhhhaaaaaa\n", n_isotopes, n_gridpoints, p_energy);
-		idx = grid_search( n_isotopes * n_gridpoints, p_energy, egrid);	
+		idx = idx_list[i];
 	}
 		
 	else if( grid_type == HASH )
@@ -333,7 +361,7 @@ __device__ void calculate_macro_xs( double p_energy, int mat, long n_isotopes,
 		// n_isotopes = 68		
 		calculate_micro_xs( p_energy, p_nuc, n_isotopes,
 		                    n_gridpoints, egrid, index_data,
-		                    nuclide_grids, idx, xs_vector, grid_type, hash_bins );
+		                    nuclide_grids, idx, xs_vector, grid_type, hash_bins, count );
 		for( int k = 0; k < 5; k++ )
 			macro_xs_vector[k] += xs_vector[k] * conc;
 	}
