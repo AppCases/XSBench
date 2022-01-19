@@ -5,3 +5,6 @@ XS_data.dat
 gvprof-database/
 gvprof-measurements*
 gvprof.log
+
+.vscode
+output.txt
