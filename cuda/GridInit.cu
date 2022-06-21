@@ -29,43 +29,34 @@ SimulationData move_simulation_data_to_device( Inputs in, int mype, SimulationDa
 	// Shallow copy of CPU simulation data to GPU simulation data
 	SimulationData GSD = SD;
 
-	printf("###################################################\n");
-	printf("###################################################\n");
-	printf("###################################################\n");
 	// Move data to GPU memory space
 	sz = GSD.length_num_nucs * sizeof(int);
-	printf("GSD.length_num_nucs=%d, sz=%d\n", GSD.length_num_nucs, sz);
 	gpuErrchk( cudaMalloc((void **) &GSD.num_nucs, sz) );
 	gpuErrchk( cudaMemcpy(GSD.num_nucs, SD.num_nucs, sz, cudaMemcpyHostToDevice) );
 	total_sz += sz;
 
 	sz = GSD.length_concs * sizeof(double);
-	printf("GSD.length_concs=%d, sz=%d\n", GSD.length_concs, sz);
 	gpuErrchk( cudaMalloc((void **) &GSD.concs, sz) );
 	gpuErrchk( cudaMemcpy(GSD.concs, SD.concs, sz, cudaMemcpyHostToDevice) );
 	total_sz += sz;
 
 	sz = GSD.length_mats * sizeof(int);
-	printf("GSD.length_mats=%d, sz=%d\n", GSD.length_mats, sz);
 	gpuErrchk( cudaMalloc((void **) &GSD.mats, sz) );
 	gpuErrchk( cudaMemcpy(GSD.mats, SD.mats, sz, cudaMemcpyHostToDevice) );
 	total_sz += sz;
 	
 	sz = GSD.length_unionized_energy_array * sizeof(double);
-	printf("GSD.length_unionized_energy_array=%d, sz=%d\n", GSD.length_unionized_energy_array, sz);
 	gpuErrchk( cudaMalloc((void **) &GSD.unionized_energy_array, sz) );
 	gpuErrchk( cudaMemcpy(GSD.unionized_energy_array, SD.unionized_energy_array, sz, cudaMemcpyHostToDevice) );
 	total_sz += sz;
 
 	sz = GSD.length_index_grid * sizeof(int);
-	printf("GSD.length_index_grid=%d, sz=%d\n", GSD.length_index_grid, sz);
 	// initialized later
 	// gpuErrchk( cudaMalloc((void **) &GSD.index_grid, sz) );
 	// gpuErrchk( cudaMemcpy(GSD.index_grid, SD.index_grid, sz, cudaMemcpyHostToDevice) );
 	total_sz += sz;
 
 	sz = GSD.length_nuclide_grid * sizeof(NuclideGridPoint);
-	printf("GSD.length_nuclide_grid=%d, sz=%d\n", GSD.length_nuclide_grid, sz);
 	gpuErrchk( cudaMalloc((void **) &GSD.nuclide_grid, sz) );
 	gpuErrchk( cudaMemcpy(GSD.nuclide_grid, SD.nuclide_grid, sz, cudaMemcpyHostToDevice) );
 	total_sz += sz;
@@ -73,14 +64,9 @@ SimulationData move_simulation_data_to_device( Inputs in, int mype, SimulationDa
 	// Allocate verification array on device. This structure is not needed on CPU, so we don't
 	// have to copy anything over.
 	sz = in.lookups * sizeof(unsigned long);
-	printf("in.lookups=%d, sz=%d\n", in.lookups, sz);
 	gpuErrchk( cudaMalloc((void **) &GSD.verification, sz) );
 	total_sz += sz;
 	GSD.length_verification = in.lookups;
-
-	printf("###################################################\n");
-	printf("###################################################\n");
-	printf("###################################################\n");
 	
 	// Synchronize
 	gpuErrchk( cudaPeekAtLastError() );
@@ -266,11 +252,6 @@ SimulationData grid_init_do_not_profile( Inputs in, int mype )
 	// materials have the same number of nuclides.
 	SD.mats = load_mats(SD.num_nucs, in.n_isotopes, &SD.max_num_nucs);
 	SD.length_mats = SD.length_num_nucs * SD.max_num_nucs;
-	for (int i = 0; i < 408; i++) {
-		printf("%d ", SD.mats[i]);
-		if (i % 11 == 0) printf("\n");
-	}
-
 
 
 	// Intialize the flattened 2D grid of nuclide concentration data. The grid holds
