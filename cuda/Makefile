@@ -6,7 +6,7 @@ COMPILER    = nvidia
 OPTIMIZE    = yes
 DEBUG       = yes
 PROFILE     = no
-SM_VERSION  = 75
+SM_VERSION  = 80
 
 #===============================================================================
 # Program name & source code list
@@ -37,7 +37,7 @@ LDFLAGS = -lm
 # NVIDIA Compiler
 ifeq ($(COMPILER),nvidia)
   CC = nvcc
-  CFLAGS += -Xcompiler -Wall -Xcompiler -O3 -arch=sm_$(SM_VERSION) -std=c++14
+  CFLAGS += -Xcompiler -Wall -Xcompiler -O3 -arch=sm_$(SM_VERSION) -std=c++14 -w
 endif
 
 # Debug Flags
